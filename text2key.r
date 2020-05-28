@@ -36,7 +36,6 @@ if attempt [exists? file: to-file system/options/args/1] [
   ]
 
   steps: sort/compare extract sections 2 func [a b] [(load a) < (load b)]
-
   either steps = unique steps [
     use [section result replaced] [
       find-line: funct [section /with current] [
@@ -69,7 +68,7 @@ if attempt [exists? file: to-file system/options/args/1] [
           ]
           replace [
             either not find replaced section/target [
-              print [{  . Replacing [} section/target {],} sections/(section/target)/line-count {lines removed}]
+              print [{  . Replacing [} section/target {],} sections/(section/target)/line-count {lines removed at line} find-line/with section/target step]
               remove/part at result find-line/with section/target step sections/(section/target)/line-count
               append replaced section/target
             ] [
@@ -80,7 +79,7 @@ if attempt [exists? file: to-file system/options/args/1] [
         ]
         if section/action = 'replace [
         ]
-        print [{  . Adding} section/line-count {lines}]
+        print [{  . Inserting} section/line-count {lines at line} find-line step]
         insert at result find-line step section/content
       ]
       foreach l result [print trim/tail l]
