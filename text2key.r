@@ -37,7 +37,7 @@ if attempt [exists? file: to-file system/options/args/1] [
 
   steps: sort/compare extract sections 2 func [a b] [(load a) < (load b)]
   either steps = unique steps [
-    use [section result replaced line target-line current] [
+    use [section result replaced target current] [
       find-line: funct [section /with current] [
         result: 1
         foreach [label content] sections [
@@ -55,40 +55,40 @@ if attempt [exists? file: to-file system/options/args/1] [
         ]
         result
       ]
+      move-to: func [line] [
+        if current != line [
+          print [{  . Moving to line} line rejoin [{[} pick [{+} {}] line > current line - current {]}]]
+          current: line
+        ]
+      ]
       result: copy [] replaced: copy [] current: 1
       foreach step steps [
         section: sections/:step
         print [{== Step [} step {]}]
         switch section/action [
           delay [
-            print [{  . Delaying} load section/target {s}]
+            print [{  . Delaying} load section/target {seconds}]
           ]
           copy [
-            target-line: find-line/with section/target step
-            print [{  . Copying from [} section/target {]} sections/(section/target)/line-count {lines at line} target-line]
+            target: find-line/with section/target step
+            print [{  . Copying from [} section/target {]} sections/(section/target)/line-count {lines at line} target]
           ]
           replace [
             either not find replaced section/target [
-              target-line: find-line/with section/target step
-              if current != target-line [
-                print [{  . Moving to line} target-line rejoin [{[} pick [{+} {}] target-line > current target-line - current {]}]]
-              ]
-              print [{  . Replacing [} section/target {], removing} sections/(section/target)/line-count {lines at line} target-line]
-              remove/part at result target-line sections/(section/target)/line-count
+              move-to target: find-line/with section/target step
+              print [{  . Replacing [} section/target {], removing} sections/(section/target)/line-count {lines at line} target]
+              remove/part at result target sections/(section/target)/line-count
               append replaced section/target
-              current: target-line
             ] [
               print [{!! Aborting: trying to replace [} section/target {] which was already replaced earlier}]
               break
             ]
           ]
         ]
-        if current != line: find-line step [
-          print [{  . Moving to line} line rejoin [{[} pick [{+} {}] line > current line - current {]}]]
-        ]
+        move-to find-line step
         print [{  . Inserting} section/line-count {lines}]
-        current: line + section/line-count
         insert at result find-line step section/content
+        current: current + section/line-count
       ]
       foreach l result [print trim/tail l]
     ]
