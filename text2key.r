@@ -101,8 +101,8 @@ if attempt [exists? file: to-file system/options/args/1] [
     current: do add-section: func [
       label target-action target
     ] [
-      last append sections reduce [label context compose [action: target-action target: (target) line-count: 0 content: copy []]]
-    ] "0" none none
+      last append sections reduce [to-string label context compose [action: target-action target: (to-string target) line-count: 0 content: copy []]]
+    ] 0 none none
 
     print [{== Parsing [} to-local-file file {]}]
     parse read file [
