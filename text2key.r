@@ -58,7 +58,16 @@ autohotkey: make backend [
     emit rejoin [{SetKeyDelay } either value = 0 [0] [to-integer 1000 * 1.0 / value] {, 0}]
   ]
   key: func [value] [
-    emit rejoin [uppercase trim/with replace/all replace/all value {ctrl} {^^} {alt} {!} #"+" {::}]
+    foreach [src dst] [
+      {ctrl}    {^^}
+      {alt}     {!}
+      {shift}   {+}
+      {win}     {#}
+      { }       {}
+    ] [
+      replace/all value src dst
+    ]
+    emit rejoin [uppercase value {::}]
   ]
 ]
 
