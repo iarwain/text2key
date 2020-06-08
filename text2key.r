@@ -5,42 +5,46 @@ REBOL [
   file: %text2key.r
 ]
 
+; === Generic backend context ===
 backend: context [
-  file: none buffer: copy []
+  file: extension: none
+  result: copy [] buffer: copy [] current: 1
   emit: func [data] [
     repend buffer data
   ]
   save: does [
     write/lines file buffer
   ]
-  new: func [file'] [
+  new: funct [file'] [
     make self [
-      file: to-rebol-file file'
+      replace file: to-rebol-file file' suffix? file extension
     ]
   ]
 ]
 
+; === AutoHotKey backend context ===
 autohotkey: make backend [
-  emit {SetKeyDelay, 40, 0}
-  end: true
+  extension: %.ahk
   move: func [delta] [
     emit rejoin [{Send ^{} pick [{Up} {Down}] delta < 0 { } abs delta {^}}]
-    end: (current + delta) > length? result
   ]
   delay: func [duration] [
-    emit rejoin [{Sleep } to-integer 1000 * load duration]
+    emit rejoin [{Sleep } to-integer 1000 * to-decimal duration]
   ]
   copy: func [source target count] [
     ; TODO
   ]
   insert: func [lines /local carry text] [
-    if carry: to-logic all [not end not empty? lines not empty? result/:current] [
+    if carry: to-logic all [current < length? result not empty? lines not empty? result/:current] [
       emit {SendEvent {Text}`n}
       emit {Send {Up}}
     ]
     forall lines [
       text: replace/all system/words/copy lines/1 {;} {`;}
-      emit rejoin [{SendEvent {Text}} text pick [{} {`n}] carry and last? lines]
+      if any [not carry not last? lines] [
+        append text {`n}
+      ]
+      emit rejoin [{SendEvent {Text}} text]
     ]
     if carry [
       emit {Send {Right}}
@@ -49,16 +53,29 @@ autohotkey: make backend [
   remove: func [count] [
     emit rejoin [{Send {Shift Down}^{Down } count {^}{Shift Up}{Delete}}]
   ]
+  rate: func [value] [
+    value: load value
+    emit rejoin [{SetKeyDelay } either value = 0 [0] [to-integer 1000 * 1.0 / value] {, 0}]
+  ]
+  key: func [value] [
+    emit rejoin [uppercase trim/with replace/all replace/all value {ctrl} {^^} {alt} {!} #"+" {::}]
+  ]
 ]
 
+; === Fetch args ===
 if attempt [exists? file: to-file system/options/args/1] [
 
-  output: autohotkey/new join file %.ahk
+  echo %text2key.log
+  begin: now/precise/time
 
-  use [current section action target] [
+  ; === Implement backend exporter ===
+  exporter: autohotkey/new file
+
+  ; === Parse sections and steps ===
+  do funct [] [
     label: [integer! opt ["." integer!]]
     option: [
-      #":" [#"<" (action: 'copy) | #">" (action: 'replace) | #"|" (action: 'delay)] copy target label
+      #":" [#"<" (action: 'copy) | #">" (action: 'replace) | #"|" (action: 'delay) | #"'" (action: 'rate)] copy target label
     | (action: none target: none)
     ]
     space: charset [#" " #"^-"]
@@ -67,25 +84,34 @@ if attempt [exists? file: to-file system/options/args/1] [
     section-marker: [
       spaces comment-marker spaces #"[" copy section label option #"]" thru lf
     ]
+    key-marker: [
+      spaces comment-marker spaces #"[" {key} #":" copy value to #"]" thru lf (set 'key trim value)
+    ]
 
-    sections: make hash! []
+    set 'sections make hash! []
     current: do add-section: func [
       label target-action target
     ] [
       last append sections reduce [label context compose [action: target-action target: (target) line-count: 0 content: copy []]]
     ] "0" none none
 
+    print [{== Parsing [} to-local-file file {]}]
     parse read file [
       any [
         section-marker (current: add-section section action target)
+      | key-marker
       | copy line thru lf (append current/content trim/tail line current/line-count: current/line-count + 1)
       ]
     ]
+    set 'steps sort/compare extract sections 2 func [a b] [(load a) < (load b)]
   ]
 
-  steps: sort/compare extract sections 2 func [a b] [(load a) < (load b)]
+  ; === Process all steps ===
   either steps = unique steps [
-    use [section replaced target] [
+    print [{== Setting key [} key {]}]
+    exporter/key key
+    print [{== Processing} length? steps {steps}]
+    do funct [] [
       find-line: funct [section /with current] [
         result: 1
         foreach [label content] sections [
@@ -104,20 +130,24 @@ if attempt [exists? file: to-file system/options/args/1] [
         result
       ]
       move-to: func [line] [
-        if current != line [
-          print [{  . Moving to line} line rejoin [{[} pick [{+} {}] line > current line - current {]}]]
-          output/move line - current
-          current: line
+        if exporter/current != line [
+          print [{  . Moving to line} line rejoin [{[} pick [{+} {}] line > exporter/current line - exporter/current {]}]]
+          exporter/move line - exporter/current
+          exporter/current: line
         ]
       ]
-      result: copy [] replaced: copy [] current: 1
+      replaced: copy []
       foreach step steps [
         section: sections/:step
-        print [{== Step [} step {]}]
+        print [{ - Step [} step {]}]
         switch section/action [
+          rate [
+            print [{  . Set rate to} section/target {cps}]
+            exporter/rate section/target
+          ]
           delay [
             print [{  . Delaying} load section/target {seconds}]
-            output/delay section/target
+            exporter/delay section/target
           ]
           copy [
             target: find-line/with section/target step
@@ -127,8 +157,8 @@ if attempt [exists? file: to-file system/options/args/1] [
             either not find replaced section/target [
               move-to target: find-line/with section/target step
               print [{  . Replacing [} section/target {], removing} sections/(section/target)/line-count {lines at line} target]
-              remove/part at result target sections/(section/target)/line-count
-              output/remove sections/(section/target)/line-count
+              remove/part at exporter/result target sections/(section/target)/line-count
+              exporter/remove sections/(section/target)/line-count
               append replaced section/target
             ] [
               print [{!! Aborting: trying to replace [} section/target {] which was already replaced earlier}]
@@ -138,22 +168,19 @@ if attempt [exists? file: to-file system/options/args/1] [
         ]
         move-to find-line step
         print [{  . Inserting} section/line-count {lines}]
-        insert at result find-line step section/content
-        output/insert section/content
-        current: current + section/line-count
+        insert at exporter/result find-line step section/content
+        exporter/insert section/content
+        exporter/current: exporter/current + section/line-count
       ]
-      output/save
-      ;foreach l result [print trim/tail l]
+
+      ; === Saving
+      print [{== Saving [} to-local-file exporter/file {]}]
+      exporter/save
+
+      end: now/precise/time
+      print [{== [} (end - begin) {] Success!}]
     ]
   ] [
     print [{!! Can't process, duplicated steps found in [} steps {]}]
   ]
 ]
-
-dump-sections: does [
-  foreach [label section] sections [
-    print [label section/action section/target section/line-count mold either empty? section/content [{}] [section/content/1]]
-  ]
-]
-
-halt
