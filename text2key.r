@@ -86,6 +86,9 @@ autohotkey: make backend [
     value: load value
     emit rejoin [{SetKeyDelay } either value = 0 [0] [to-integer 1000 * 1.0 / value] {, 0}]
   ]
+  highlight: func [delta] [
+    emit rejoin [{Send {Shift Down}^{} pick [{Down } {Up }] delta > 0 abs delta {^}{Shift Up}}]
+  ]
   key: func [value] [
     foreach [src dst] [
       {ctrl}    {^^}
@@ -113,7 +116,7 @@ if attempt [exists? file: to-file system/options/args/1] [
   do funct [] [
     label: [integer! opt ["." integer!]]
     option: [
-      #":" [#"<" (action: 'copy) | #">" (action: 'replace) | #"|" (action: 'delay) | #"'" (action: 'rate)] copy target label
+      #":" [#"<" (action: 'copy) | #">" (action: 'replace) | #"|" (action: 'delay) | #"'" (action: 'rate) | #"#" (action: 'highlight)] copy target label
     | (action: none target: none)
     ]
     space: charset [#" " #"^-"]
@@ -178,6 +181,7 @@ if attempt [exists? file: to-file system/options/args/1] [
       foreach step steps [
         section: sections/:step
         print [{ - Step [} step {]}]
+        ; === Pre-actions ===
         switch section/action [
           rate [
             print [{  . Set rate to} section/target {cps}]
@@ -204,11 +208,22 @@ if attempt [exists? file: to-file system/options/args/1] [
             ]
           ]
         ]
+
+        ; === Insertion ===
         move-to find-line step
         print [{  . Inserting} section/line-count {lines}]
         insert at exporter/data find-line step section/content
         exporter/insert section/content
         exporter/current: exporter/current + section/line-count
+
+        ; === Post-actions ===
+        switch section/action [
+          highlight [
+            print [{  . Highlighting to beginning of [} section/target {]}]
+            exporter/highlight (target: find-line/with section/target step) - exporter/current
+            exporter/current: target
+          ]
+        ]
       ]
 
       ; === Saving
