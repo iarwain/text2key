@@ -7,15 +7,15 @@ REBOL [
 
 ; === Generic backend context ===
 backend: context [
+  data: copy [] output: copy [] current: 1
   file: extension: none
-  result: copy [] buffer: copy [] current: 1
   emit: func [data] [
-    repend buffer data
+    repend output data
   ]
   save: does [
-    write/lines file buffer
+    write/lines file output
   ]
-  new: funct [file'] [
+  new: func [file'] [
     make self [
       replace file: to-rebol-file file' suffix? file extension
     ]
@@ -24,8 +24,14 @@ backend: context [
 
 ; === AutoHotKey backend context ===
 autohotkey: make backend [
-  extension: %.ahk
+  extension: %.ahk remove-count: 0 remove-data: none
+  emit {Esc::ExitApp}
+  emit {^^!F1::Reload}
   move: func [delta] [
+    if remove-count != 0 [
+      emit rejoin [{Send {Shift Down}^{Down } remove-count {^}{Shift Up}{Delete}}]
+      remove-count: 0
+    ]
     emit rejoin [{Send ^{} pick [{Up} {Down}] delta < 0 { } abs delta {^}}]
   ]
   delay: func [duration] [
@@ -35,23 +41,46 @@ autohotkey: make backend [
     ; TODO
   ]
   insert: func [lines /local carry text] [
-    if carry: to-logic all [current < length? result not empty? lines not empty? result/:current] [
-      emit {SendEvent {Text}`n}
-      emit {Send {Up}}
-    ]
-    forall lines [
-      text: replace/all system/words/copy lines/1 {;} {`;}
-      if any [not carry not last? lines] [
-        append text {`n}
+    either remove-count != 0 [
+      foreach line lines [
+        either remove-count > 0  [
+            emit {Send {Insert}}
+            emit rejoin [{SendEvent {Text}} replace/all system/words/copy line {;} {`;}]
+            if (length? line) < (length? remove-data/1) [
+              emit {Send {Shift Down}{End}{Shift Up}{Delete}}
+            ]
+            emit {Send {Right}}
+            emit {Send {Insert}}
+        ] [
+          emit rejoin [{SendEvent {Text}} replace/all system/words/copy line {;} {`;} {`n}]
+        ]
+        remove-count: remove-count - 1
+        remove-data: next remove-data
       ]
-      emit rejoin [{SendEvent {Text}} text]
-    ]
-    if carry [
-      emit {Send {Right}}
+      if remove-count > 0 [
+        emit rejoin [{Send {Shift Down}^{Down } remove-count {^}{Shift Up}{Delete}}]
+      ]
+      remove-count: 0
+    ] [
+      if carry: to-logic all [current < length? data not empty? lines not empty? data/:current] [
+        emit {SendEvent {Text}`n}
+        emit {Send {Up}}
+      ]
+      forall lines [
+        text: replace/all system/words/copy lines/1 {;} {`;}
+        if any [not carry not last? lines] [
+          append text {`n}
+        ]
+        emit rejoin [{SendEvent {Text}} text]
+      ]
+      if carry [
+        emit {Send {Right}}
+      ]
     ]
   ]
   remove: func [count] [
-    emit rejoin [{Send {Shift Down}^{Down } count {^}{Shift Up}{Delete}}]
+    remove-count: count
+    remove-data: system/words/copy/deep/part at data current count
   ]
   rate: func [value] [
     value: load value
@@ -166,8 +195,8 @@ if attempt [exists? file: to-file system/options/args/1] [
             either not find replaced section/target [
               move-to target: find-line/with section/target step
               print [{  . Replacing [} section/target {], removing} sections/(section/target)/line-count {lines at line} target]
-              remove/part at exporter/result target sections/(section/target)/line-count
               exporter/remove sections/(section/target)/line-count
+              remove/part at exporter/data target sections/(section/target)/line-count
               append replaced section/target
             ] [
               print [{!! Aborting: trying to replace [} section/target {] which was already replaced earlier}]
@@ -177,7 +206,7 @@ if attempt [exists? file: to-file system/options/args/1] [
         ]
         move-to find-line step
         print [{  . Inserting} section/line-count {lines}]
-        insert at exporter/result find-line step section/content
+        insert at exporter/data find-line step section/content
         exporter/insert section/content
         exporter/current: exporter/current + section/line-count
       ]
@@ -190,6 +219,6 @@ if attempt [exists? file: to-file system/options/args/1] [
       print [{== [} (end - begin) {] Success!}]
     ]
   ] [
-    print [{!! Can't process, duplicated steps found in [} steps {]}]
+    print [{!! Can't process, found duplicated steps [} unique collect [forall steps [if find next steps steps/1 [keep steps/1]]] {]}]
   ]
 ]
