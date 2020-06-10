@@ -181,6 +181,7 @@ if attempt [exists? file: to-file system/options/args/1] [
       foreach step steps [
         section: sections/:step
         print [{ - Step [} step {]}]
+
         ; === Pre-actions ===
         switch section/action [
           rate [
@@ -212,8 +213,8 @@ if attempt [exists? file: to-file system/options/args/1] [
         ; === Insertion ===
         move-to find-line step
         print [{  . Inserting} section/line-count {lines}]
-        insert at exporter/data find-line step section/content
         exporter/insert section/content
+        insert at exporter/data find-line step section/content
         exporter/current: exporter/current + section/line-count
 
         ; === Post-actions ===
