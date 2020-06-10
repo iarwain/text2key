@@ -24,21 +24,23 @@ backend: context [
 
 ; === AutoHotKey backend context ===
 autohotkey: make backend [
+
+  ; === Variables ===
   extension: %.ahk remove-count: 0 remove-data: none
+
+  ; === Initialization ===
   emit {Esc::ExitApp}
   emit {^^!F1::Reload}
-  move: func [delta] [
-    if remove-count != 0 [
-      emit rejoin [{Send {Shift Down}^{Down } remove-count {^}{Shift Up}{Delete}}]
-      remove-count: 0
-    ]
-    emit rejoin [{Send ^{} pick [{Up} {Down}] delta < 0 { } abs delta {^}}]
+
+  ; === Functions ===
+  copy: func [source target count] [
+    ; TODO
   ]
   delay: func [duration] [
     emit rejoin [{Sleep } to-integer 1000 * to-decimal duration]
   ]
-  copy: func [source target count] [
-    ; TODO
+  highlight: func [delta] [
+    emit rejoin [{Send {Shift Down}^{} pick [{Down } {Up }] delta > 0 abs delta {^}{Shift Up}}]
   ]
   insert: func [lines /local carry text] [
     either remove-count != 0 [
@@ -78,17 +80,6 @@ autohotkey: make backend [
       ]
     ]
   ]
-  remove: func [count] [
-    remove-count: count
-    remove-data: system/words/copy/deep/part at data current count
-  ]
-  rate: func [value] [
-    value: load value
-    emit rejoin [{SetKeyDelay } either value = 0 [0] [to-integer 1000 * 1.0 / value] {, 0}]
-  ]
-  highlight: func [delta] [
-    emit rejoin [{Send {Shift Down}^{} pick [{Down } {Up }] delta > 0 abs delta {^}{Shift Up}}]
-  ]
   key: func [value] [
     foreach [src dst] [
       {ctrl}    {^^}
@@ -100,6 +91,25 @@ autohotkey: make backend [
       replace/all value src dst
     ]
     emit rejoin [uppercase value {::}]
+  ]
+  move: func [delta] [
+    if remove-count != 0 [
+      emit rejoin [{Send {Shift Down}^{Down } remove-count {^}{Shift Up}{Delete}}]
+      remove-count: 0
+    ]
+    emit rejoin [{Send ^{} pick [{Up} {Down}] delta < 0 { } abs delta {^}}]
+  ]
+  rate: func [value] [
+    value: load value
+    emit rejoin [{SetKeyDelay } either value = 0 [0] [to-integer 1000 * 1.0 / value] {, 0}]
+  ]
+  remove: func [count] [
+    remove-count: count
+    remove-data: system/words/copy/deep/part at data current count
+  ]
+  scroll: func [delta] [
+    delta: to-integer delta
+    emit rejoin [{Send {Control Down}^{} pick [{Down } {Up }] delta > 0 abs delta {^}{Control Up}}]
   ]
 ]
 
@@ -116,7 +126,7 @@ if attempt [exists? file: to-file system/options/args/1] [
   do funct [] [
     label: [integer! opt ["." integer!]]
     option: [
-      #":" [#"<" (action: 'copy) | #">" (action: 'replace) | #"|" (action: 'delay) | #"'" (action: 'rate) | #"#" (action: 'highlight)] copy target label
+      #":" [#"<" (action: 'copy) | #">" (action: 'replace) | #"|" (action: 'delay) | #"'" (action: 'rate) | #"#" (action: 'highlight) | #"." (action: 'scroll)] copy target label
     | (action: none target: none)
     ]
     space: charset [#" " #"^-"]
@@ -184,17 +194,17 @@ if attempt [exists? file: to-file system/options/args/1] [
 
         ; === Pre-actions ===
         switch section/action [
-          rate [
-            print [{  . Set rate to} section/target {cps}]
-            exporter/rate section/target
+          copy [
+            target: find-line/with section/target step
+            print [{  . Copying from [} section/target {]} sections/(section/target)/line-count {lines at line} target]
           ]
           delay [
             print [{  . Delaying} load section/target {seconds}]
             exporter/delay section/target
           ]
-          copy [
-            target: find-line/with section/target step
-            print [{  . Copying from [} section/target {]} sections/(section/target)/line-count {lines at line} target]
+          rate [
+            print [{  . Set rate to} section/target {cps}]
+            exporter/rate section/target
           ]
           replace [
             either not find replaced section/target [
@@ -223,6 +233,10 @@ if attempt [exists? file: to-file system/options/args/1] [
             print [{  . Highlighting to beginning of [} section/target {]}]
             exporter/highlight (target: find-line/with section/target step) - exporter/current
             exporter/current: target
+          ]
+          scroll [
+            print [{  . Scrolling [} section/target {] lines}]
+            exporter/scroll section/target
           ]
         ]
       ]
