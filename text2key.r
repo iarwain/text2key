@@ -113,10 +113,12 @@ autohotkey: make backend [
   ]
 ]
 
-; === Fetch args ===
-if attempt [exists? file: to-file system/options/args/1] [
+; === Log ===
+echo %text2key.log
 
-  echo %text2key.log
+; === Fetch args ===
+either attempt [exists? file: to-file system/options/args/1] [
+
   begin: now/precise/time
 
   ; === Implement backend exporter ===
@@ -251,4 +253,6 @@ if attempt [exists? file: to-file system/options/args/1] [
   ] [
     print [{!! Can't process, found duplicated steps [} unique collect [forall steps [if find next steps steps/1 [keep steps/1]]] {]}]
   ]
+] [
+  print [{== Usage:} to-local-file second split-path system/options/script {[textfile]}]
 ]
