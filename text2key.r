@@ -40,19 +40,19 @@ autohotkey: make backend [
     emit rejoin [{Sleep } to-integer 1000 * to-decimal duration]
   ]
   highlight: func [delta] [
-    emit rejoin [{Send {Shift Down}^{} pick [{Down } {Up }] delta > 0 abs delta {^}{Shift Up}}]
+    emit rejoin [{SendEvent {Shift Down}^{} pick [{Down } {Up }] delta > 0 abs delta {^}{Shift Up}}]
   ]
   insert: func [lines /local carry text] [
     either remove-count != 0 [
       foreach line lines [
         either remove-count > 0  [
-            emit {Send {Insert}}
+            emit {SendEvent {Insert}}
             emit rejoin [{SendEvent {Text}} replace/all system/words/copy line {;} {`;}]
             if (length? line) < (length? remove-data/1) [
-              emit {Send {Shift Down}{End}{Shift Up}{Delete}}
+              emit {SendEvent {Shift Down}{End}{Shift Up}{Delete}}
             ]
-            emit {Send {Right}}
-            emit {Send {Insert}}
+            emit {SendEvent {Right}}
+            emit {SendEvent {Insert}}
         ] [
           emit rejoin [{SendEvent {Text}} replace/all system/words/copy line {;} {`;} {`n}]
         ]
@@ -60,13 +60,13 @@ autohotkey: make backend [
         remove-data: next remove-data
       ]
       if remove-count > 0 [
-        emit rejoin [{Send {Shift Down}^{Down } remove-count {^}{Shift Up}{Delete}}]
+        emit rejoin [{SendEvent {Shift Down}^{Down } remove-count {^}{Shift Up}{Delete}}]
       ]
       remove-count: 0
     ] [
       if carry: to-logic all [current < length? data not empty? lines not empty? data/:current] [
         emit {SendEvent {Text}`n}
-        emit {Send {Up}}
+        emit {SendEvent {Up}}
       ]
       forall lines [
         text: replace/all system/words/copy lines/1 {;} {`;}
@@ -76,7 +76,7 @@ autohotkey: make backend [
         emit rejoin [{SendEvent {Text}} text]
       ]
       if carry [
-        emit {Send {Right}}
+        emit {SendEvent {Right}}
       ]
     ]
   ]
@@ -94,7 +94,7 @@ autohotkey: make backend [
   ]
   move: func [delta] [
     if remove-count != 0 [
-      emit rejoin [{Send {Shift Down}^{Down } remove-count {^}{Shift Up}{Delete}}]
+      emit rejoin [{SendEvent {Shift Down}^{Down } remove-count {^}{Shift Up}{Delete}}]
       remove-count: 0
     ]
     emit rejoin [{Send ^{} pick [{Up} {Down}] delta < 0 { } abs delta {^}}]
@@ -109,7 +109,7 @@ autohotkey: make backend [
   ]
   scroll: func [delta] [
     delta: to-integer delta
-    emit rejoin [{Send {Control Down}^{} pick [{Down } {Up }] delta > 0 abs delta {^}{Control Up}}]
+    emit rejoin [{SendEvent {Control Down}^{} pick [{Down } {Up }] delta > 0 abs delta {^}{Control Up}}]
   ]
 ]
 
@@ -128,7 +128,7 @@ either attempt [exists? file: to-file system/options/args/1] [
   do funct [] [
     label: [integer! opt ["." integer!]]
     option: [
-      #":" [#"<" (action: 'copy) | #">" (action: 'replace) | #"|" (action: 'delay) | #"'" (action: 'rate) | #"#" (action: 'highlight) | #"." (action: 'scroll)] copy target label
+      #":" [#"<" (action: 'copy) | #">" (action: 'replace) | #"|" (action: 'delay) | #"'" (action: 'rate) | #"#" (action: 'highlight) | #"^^" (action: 'scroll)] copy target label
     | (action: none target: none)
     ]
     space: charset [#" " #"^-"]
