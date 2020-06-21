@@ -12,7 +12,7 @@ backend: context [
   emit: func [data] [
     repend output data
   ]
-  save: does [
+  export: does [
     write/lines file output
   ]
   new: func [file'] [
@@ -36,7 +36,7 @@ autohotkey: make backend [
   copy: func [source target count] [
     ; TODO
   ]
-  delay: func [duration] [
+  pause: func [duration] [
     emit rejoin [{Sleep } to-integer 1000 * to-decimal duration]
   ]
   highlight: func [delta] [
@@ -46,13 +46,13 @@ autohotkey: make backend [
     either remove-count != 0 [
       foreach line lines [
         either remove-count > 0  [
-            emit {SendEvent {Insert}}
-            emit rejoin [{SendEvent {Text}} replace/all system/words/copy line {;} {`;}]
-            if (length? line) < (length? remove-data/1) [
-              emit {SendEvent {Shift Down}{End}{Shift Up}{Delete}}
-            ]
-            emit {SendEvent {Right}}
-            emit {SendEvent {Insert}}
+          emit {SendEvent {Insert}}
+          emit rejoin [{SendEvent {Text}} replace/all system/words/copy line {;} {`;}]
+          if (length? line) < (length? remove-data/1) [
+            emit {SendEvent {Shift Down}{End}{Shift Up}{Delete}}
+          ]
+          emit {SendEvent {Right}}
+          emit {SendEvent {Insert}}
         ] [
           emit rejoin [{SendEvent {Text}} replace/all system/words/copy line {;} {`;} {`n}]
         ]
@@ -100,12 +100,14 @@ autohotkey: make backend [
     emit rejoin [{Send ^{} pick [{Up} {Down}] delta < 0 { } abs delta {^}}]
   ]
   rate: func [value] [
-    value: load value
     emit rejoin [{SetKeyDelay } either value = 0 [0] [to-integer 1000 * 1.0 / value] {, 0}]
   ]
   remove: func [count] [
     remove-count: count
     remove-data: system/words/copy/deep/part at data current count
+  ]
+  save: does [
+    emit {SendEvent {Control Down}{s}{Control Up}}
   ]
   scroll: func [delta] [
     delta: to-integer delta
@@ -128,14 +130,22 @@ either attempt [exists? file: to-file system/options/args/1] [
   do funct [] [
     label: [integer! opt ["." integer!]]
     option: [
-      #":" [#"<" (action: 'copy) | #">" (action: 'replace) | #"|" (action: 'delay) | #"'" (action: 'rate) | #"#" (action: 'highlight) | #"^^" (action: 'scroll)] copy target label
-    | (action: none target: none)
+      (action: arg: none) spaces #":"
+      [ #"<"  (action: 'copy)
+      | #">"  (action: 'replace)
+      | #"|"  (action: 'pause)
+      | #"'"  (action: 'rate)
+      | #"#"  (action: 'highlight)
+      | #"^^" (action: 'scroll)
+      | #"!"  (action: 'save)
+      ] opt [copy arg label (arg: load arg)]
     ]
+    options: [(actions: copy []) any [option (repend actions [action arg])]]
     space: charset [#" " #"^-"]
     spaces: [any space]
     comment-marker: [{//} | #";" | #"#"]
     section-marker: [
-      spaces comment-marker spaces #"[" copy section label option #"]" thru lf
+      spaces comment-marker spaces #"[" copy section label options #"]" thru lf
     ]
     key-marker: [
       spaces comment-marker spaces #"[" {key} #":" copy value to #"]" thru lf (set 'key trim value)
@@ -143,15 +153,15 @@ either attempt [exists? file: to-file system/options/args/1] [
 
     set 'sections make hash! []
     current: do add-section: func [
-      label target-action target
+      label actions'
     ] [
-      last append sections reduce [to-string label context compose [action: target-action target: (to-string target) line-count: 0 content: copy []]]
-    ] 0 none none
+      last append sections reduce [trim to-string label context [actions: actions' line-count: 0 content: copy []]]
+    ] 0 []
 
     print [{== Parsing [} to-local-file file {]}]
     parse read file [
       any [
-        section-marker (current: add-section section action target)
+        section-marker (current: add-section section actions)
       | key-marker
       | copy line thru lf (append current/content trim/tail line current/line-count: current/line-count + 1)
       ]
@@ -174,7 +184,7 @@ either attempt [exists? file: to-file system/options/args/1] [
             ]
             all [
               not find replaced label
-              (load label) < (load either with [current] [section])
+              (load label) < (load either with [to-string current] [section])
             ] [
               result: result + sections/:label/line-count
             ]
@@ -195,29 +205,36 @@ either attempt [exists? file: to-file system/options/args/1] [
         print [{ - Step [} step {]}]
 
         ; === Pre-actions ===
-        switch section/action [
-          copy [
-            target: find-line/with section/target step
-            print [{  . Copying from [} section/target {]} sections/(section/target)/line-count {lines at line} target]
-          ]
-          delay [
-            print [{  . Delaying} load section/target {seconds}]
-            exporter/delay section/target
-          ]
-          rate [
-            print [{  . Set rate to} section/target {cps}]
-            exporter/rate section/target
-          ]
-          replace [
-            either not find replaced section/target [
-              move-to target: find-line/with section/target step
-              print [{  . Replacing [} section/target {], removing} sections/(section/target)/line-count {lines at line} target]
-              exporter/remove sections/(section/target)/line-count
-              remove/part at exporter/data target sections/(section/target)/line-count
-              append replaced section/target
-            ] [
-              print [{!! Aborting: trying to replace [} section/target {] which was already replaced earlier}]
-              break
+        foreach [action arg] section/actions [
+          switch action [
+            copy [
+              target: find-line/with arg step
+              print [{  . Copying from [} arg {]} sections/(to-string arg)/line-count {lines at line} target]
+            ]
+            pause [
+              print [{  . Pausing} arg {seconds}]
+              exporter/pause arg
+            ]
+            rate [
+              print [{  . Set rate to} arg {cps}]
+              exporter/rate arg
+            ]
+            replace [
+            arg: to-string arg
+              either not find replaced arg [
+                move-to target: find-line/with arg step
+                print [{  . Replacing [} arg {], removing} sections/(arg)/line-count {lines at line} target]
+                exporter/remove sections/(arg)/line-count
+                remove/part at exporter/data target sections/(arg)/line-count
+                append replaced arg
+              ] [
+                print [{!! Aborting: trying to replace [} arg {] which was already replaced earlier}]
+                break
+              ]
+            ]
+            save [
+              print [{  . Saving document}]
+              exporter/save
             ]
           ]
         ]
@@ -230,22 +247,24 @@ either attempt [exists? file: to-file system/options/args/1] [
         exporter/current: exporter/current + section/line-count
 
         ; === Post-actions ===
-        switch section/action [
-          highlight [
-            print [{  . Highlighting to beginning of [} section/target {]}]
-            exporter/highlight (target: find-line/with section/target step) - exporter/current
-            exporter/current: target
-          ]
-          scroll [
-            print [{  . Scrolling [} section/target {] lines}]
-            exporter/scroll section/target
+        foreach [action arg] section/actions [
+          switch action [
+            highlight [
+              print [{  . Highlighting to beginning of [} arg {]}]
+              exporter/highlight (target: find-line/with arg step) - exporter/current
+              exporter/current: target
+            ]
+            scroll [
+              print [{  . Scrolling [} arg {] lines}]
+              exporter/scroll arg
+            ]
           ]
         ]
       ]
 
       ; === Saving
       print [{== Saving [} to-local-file exporter/file {]}]
-      exporter/save
+      exporter/export
 
       end: now/precise/time
       print [{== [} (end - begin) {] Success!}]
