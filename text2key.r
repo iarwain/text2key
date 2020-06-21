@@ -5,6 +5,10 @@ REBOL [
   file: %text2key.r
 ]
 
+; === Default settings ===
+editor: {@sublime_text.exe}
+key:    {ctrl alt f12}
+
 ; === Generic backend context ===
 backend: context [
   data: copy [] output: copy [] current: 1
@@ -92,6 +96,11 @@ autohotkey: make backend [
     ]
     emit rejoin [uppercase value {::}]
   ]
+  editor: func [value] [
+    emit {SetTitleMatchMode, 2}
+    emit reform [{WinActivate,} replace value #"@" " ahk_exe "]
+    emit {SendEvent {Control Down}{a}{Control Up}{Delete}}
+  ]
   move: func [delta] [
     if remove-count != 0 [
       emit rejoin [{SendEvent {Shift Down}^{Down } remove-count {^}{Shift Up}{Delete}}]
@@ -150,6 +159,9 @@ either attempt [exists? file: to-file system/options/args/1] [
     key-marker: [
       spaces comment-marker spaces #"[" {key} #":" copy value to #"]" thru lf (set 'key trim value)
     ]
+    editor-marker: [
+      spaces comment-marker spaces #"[" {editor} #":" copy value to #"]" thru lf (set 'editor trim value)
+    ]
 
     set 'sections make hash! []
     current: do add-section: func [
@@ -163,6 +175,7 @@ either attempt [exists? file: to-file system/options/args/1] [
       any [
         section-marker (current: add-section section actions)
       | key-marker
+      | editor-marker
       | copy line thru lf (append current/content trim/tail line current/line-count: current/line-count + 1)
       ]
     ]
@@ -173,6 +186,8 @@ either attempt [exists? file: to-file system/options/args/1] [
   either steps = unique steps [
     print [{== Setting key [} key {]}]
     exporter/key key
+    print [{== Setting editor [} editor {]}]
+    exporter/editor editor
     print [{== Processing} length? steps {steps}]
     do funct [] [
       find-line: funct [section /with current] [
