@@ -30,7 +30,7 @@ backend: context [
 autohotkey: make backend [
 
   ; === Variables ===
-  extension: %.ahk remove-count: 0 remove-data: none
+  extension: %.ahk remove-count: highlight-count: 0 remove-data: none
 
   ; === Initialization ===
   emit {Esc::ExitApp}
@@ -45,7 +45,7 @@ autohotkey: make backend [
   {
     Loop, parse, text
     {
-      Send {text}%A_LoopField%
+      SendEvent {text}%A_LoopField%
       Random delay, 0, %KeyVariation%
       Sleep %delay%
     }
@@ -61,8 +61,13 @@ autohotkey: make backend [
   ]
   highlight: func [delta] [
     emit rejoin [{SendEvent {Shift Down}^{} pick [{Down } {Up }] delta > 0 abs delta {^}{Shift Up}}]
+    highlight-count: delta
   ]
   insert: func [lines /local carry text] [
+    if highlight-count != 0 [
+      emit either highlight-count > 0 [{SendEvent {Left}}] [{SendEvent {Right}}]
+      highlight-count: 0
+    ]
     either remove-count != 0 [
       foreach line lines [
         either remove-count > 0  [
@@ -119,11 +124,15 @@ autohotkey: make backend [
     emit {SendEvent {Control Down}{a}{Control Up}{Delete}}
   ]
   move: func [delta] [
+    if highlight-count != 0 [
+      emit either highlight-count > 0 [{SendEvent {Left}}] [{SendEvent {Right}}]
+      highlight-count: 0
+    ]
     if remove-count != 0 [
       emit rejoin [{SendEvent {Shift Down}^{Down } remove-count {^}{Shift Up}{Delete}}]
       remove-count: 0
     ]
-    emit rejoin [{Send ^{} pick [{Up} {Down}] delta < 0 { } abs delta {^}}]
+    emit rejoin [{SendEvent ^{} pick [{Up} {Down}] delta < 0 { } abs delta {^}}]
   ]
   rate: func [values] [
     emit rejoin [{SetKeyDelay } either values/1 = 0 [0] [to-integer 1000 * 1.0 / values/1] {, 0}]
@@ -221,7 +230,7 @@ either attempt [exists? file: to-file system/options/args/1] [
     print [{== Processing} length? steps {steps}]
     do funct [] [
       find-line: funct [section /with current] [
-        result: 1
+        section: to-string section result: 1
         foreach [label content] sections [
           case [
             label = section [
@@ -249,12 +258,17 @@ either attempt [exists? file: to-file system/options/args/1] [
         section: sections/:step
         print [{ - Step [} step {]}]
 
-        ; === Pre-actions ===
+        ; === Actions ===
         foreach [action arg] section/actions [
           switch action [
             copy [
               target: find-line/with arg step
               print [{  . Copying from [} arg {]} sections/(to-string arg)/line-count {lines at line} target]
+            ]
+            highlight [
+              target: find-line/with arg step
+              print [{  . Highlighting to beginning of [} arg {], line} target]
+              exporter/highlight target - exporter/current
             ]
             pause [
               print [{  . Pausing} arg {seconds}]
@@ -298,17 +312,6 @@ either attempt [exists? file: to-file system/options/args/1] [
         exporter/insert section/content
         insert at exporter/data find-line step section/content
         exporter/current: exporter/current + section/line-count
-
-        ; === Post-actions ===
-        foreach [action arg] section/actions [
-          switch action [
-            highlight [
-              print [{  . Highlighting to beginning of [} arg {]}]
-              exporter/highlight (target: find-line/with arg step) - exporter/current
-              exporter/current: target
-            ]
-          ]
-        ]
       ]
 
       ; === Saving
