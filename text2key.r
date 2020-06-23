@@ -72,14 +72,14 @@ autohotkey: make backend [
       foreach line lines [
         either remove-count > 0  [
           emit {SendEvent {Insert}}
-          emit rejoin [{S("} replace/all system/words/copy line {;} {`;} {")}]
+          emit rejoin [{S("} replace/all replace/all system/words/copy line {;} {`;} {"} {""} {")}]
           if (length? line) < (length? remove-data/1) [
             emit {SendEvent {Shift Down}{End}{Shift Up}{Delete}}
           ]
           emit {SendEvent {Right}}
           emit {SendEvent {Insert}}
         ] [
-          emit rejoin [{S("} replace/all system/words/copy line {;} {`;} {`n} {")}]
+          emit rejoin [{S("} replace/all replace/all system/words/copy line {;} {`;} {"} {""} {`n} {")}]
         ]
         remove-count: remove-count - 1
         remove-data: next remove-data
@@ -94,7 +94,7 @@ autohotkey: make backend [
         emit {SendEvent {Up}}
       ]
       forall lines [
-        text: replace/all system/words/copy lines/1 {;} {`;}
+        text: replace/all replace/all system/words/copy lines/1 {;} {`;} {"} {""}
         if any [not carry not last? lines] [
           append text {`n}
         ]
@@ -173,7 +173,7 @@ either attempt [exists? file: to-rebol-file system/options/args/1] [
 
   ; === Parse sections and steps ===
   do funct [] [
-    label: [integer! opt ["." integer!]]
+    label: [spaces opt #"-" integer! opt ["." integer!]]
     option-marker: #":"
     option-value: complement charset reduce [option-marker #"]"]
     option: [
@@ -210,7 +210,7 @@ either attempt [exists? file: to-rebol-file system/options/args/1] [
     ] 0 []
 
     print [{== Parsing [} to-local-file file {]}]
-    parse read file [
+    parse/all read file [
       any [
         section-marker (current: add-section section actions)
       | key-marker
