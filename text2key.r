@@ -203,11 +203,12 @@ either attempt [exists? file: to-rebol-file system/options/args/1] [
     ]
 
     set 'sections make hash! []
-    current: do add-section: func [
+    current: 1
+    add-section: func [
       label actions'
     ] [
       last append sections reduce [trim to-string label context [actions: actions' line-count: 0 content: copy []]]
-    ] 0 []
+    ]
 
     print [{== Parsing [} to-local-file file {]}]
     parse/all read file [
