@@ -114,6 +114,7 @@ autohotkey: make backend [
   ]
   editor: func [value] [
     emit {SetTitleMatchMode, 2}
+    emit reform [{WinWait,} replace value #"@" " ahk_exe "]
     emit reform [{WinActivate,} replace value #"@" " ahk_exe "]
     emit {SendEvent {Control Down}{a}{Control Up}{Delete}}
   ]
@@ -124,10 +125,10 @@ autohotkey: make backend [
     ]
     emit rejoin [{Send ^{} pick [{Up} {Down}] delta < 0 { } abs delta {^}}]
   ]
-  rate: func [value] [
-    emit rejoin [{SetKeyDelay } either value/1 = 0 [0] [to-integer 1000 * 1.0 / value/1] {, 0}]
-    either 1 < length? value [
-      emit reform [{global KeyVariation :=} round/floor (1000 * value/2)]
+  rate: func [values] [
+    emit rejoin [{SetKeyDelay } either values/1 = 0 [0] [to-integer 1000 * 1.0 / values/1] {, 0}]
+    either 1 < length? values [
+      emit reform [{global KeyVariation :=} round/floor (1000 * values/2)]
     ] [
       emit {global KeyVariation := 0}
     ]
