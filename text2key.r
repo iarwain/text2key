@@ -144,6 +144,11 @@ autohotkey: make backend [
     delta: to-integer delta
     emit rejoin [{SendEvent {Control Down}^{} pick [{Down } {Up }] delta > 0 abs delta {^}{Control Up}}]
   ]
+  send: func [value] [
+    emit {SetKeyDelay %A_KeyDelay%, 100}
+    emit reform [either find value #"@" [{ControlSend, ahk_parent,}] [{Send}] replace value #"@" ", ahk_exe "]
+    emit {SetKeyDelay %A_KeyDelay%, 0}
+  ]
 ]
 
 ; === Log ===
@@ -160,15 +165,18 @@ either attempt [exists? file: to-file system/options/args/1] [
   ; === Parse sections and steps ===
   do funct [] [
     label: [integer! opt ["." integer!]]
+    option-marker: #":"
+    option-value: complement charset reduce [option-marker #"]"]
     option: [
-      (action: arg: none) spaces #":"
+      (action: arg: none) spaces option-marker
       [ #"<"  (action: 'copy)
-      | #">"  (action: 'replace)
+      | #"#"  (action: 'highlight)
       | #"|"  (action: 'pause)
       | #"'"  (action: 'rate) [copy arg 1 2 label (arg: to-block load arg)]
-      | #"#"  (action: 'highlight)
+      | #">"  (action: 'replace)
       | #"^^" (action: 'scroll)
       | #"!"  (action: 'save)
+      | #"%"  (action: 'send) [copy arg any option-value (arg: trim arg)]
       ] opt [copy arg label (arg: load arg)]
     ]
     options: [(actions: copy []) any [option (repend actions [action arg])]]
@@ -273,6 +281,14 @@ either attempt [exists? file: to-file system/options/args/1] [
               print [{  . Saving document}]
               exporter/save
             ]
+            scroll [
+              print [{  . Scrolling [} arg {] lines}]
+              exporter/scroll arg
+            ]
+            send [
+              print [{  . Sending [} arg {]}]
+              exporter/send arg
+            ]
           ]
         ]
 
@@ -290,10 +306,6 @@ either attempt [exists? file: to-file system/options/args/1] [
               print [{  . Highlighting to beginning of [} arg {]}]
               exporter/highlight (target: find-line/with arg step) - exporter/current
               exporter/current: target
-            ]
-            scroll [
-              print [{  . Scrolling [} arg {] lines}]
-              exporter/scroll arg
             ]
           ]
         ]
