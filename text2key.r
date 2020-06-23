@@ -164,7 +164,7 @@ autohotkey: make backend [
 echo %text2key.log
 
 ; === Fetch args ===
-either attempt [exists? file: to-file system/options/args/1] [
+either attempt [exists? file: to-rebol-file system/options/args/1] [
 
   begin: now/precise/time
 
