@@ -128,7 +128,7 @@ autohotkey: make backend [
   rate: func [values] [
     emit rejoin [{SetKeyDelay } either values/1 = 0 [0] [to-integer 1000 * 1.0 / values/1] {, 0}]
     either 1 < length? values [
-      emit reform [{global KeyVariation :=} round/floor (1000 * values/2)]
+      emit reform [{global KeyVariation :=} to-integer (1000 * values/2)]
     ] [
       emit {global KeyVariation := 0}
     ]
@@ -261,11 +261,11 @@ either attempt [exists? file: to-file system/options/args/1] [
               exporter/pause arg
             ]
             rate [
-              print rejoin [{  . Set rate to } arg/1 either 2 = length? arg [rejoin [{ +/-} arg/2]] [{}] { cps}]
+              print rejoin [{  . Set rate to } arg/1 either 2 = length? arg [rejoin [{ +/-} to-integer (1000 * arg/2) {ms}]] [{}] { cps}]
               exporter/rate arg
             ]
             replace [
-            arg: to-string arg
+              arg: to-string arg
               either not find replaced arg [
                 move-to target: find-line/with arg step
                 print [{  . Replacing [} arg {], removing} sections/(arg)/line-count {lines at line} target]
