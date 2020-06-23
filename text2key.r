@@ -35,6 +35,22 @@ autohotkey: make backend [
   ; === Initialization ===
   emit {Esc::ExitApp}
   emit {^^!F1::Reload}
+  emit {S(text)
+{
+  if %A_KeyDelay% = 0
+  {
+    SendEvent {Text}%text%
+  }
+  else
+  {
+    Loop, parse, text
+    {
+      Send {text}%A_LoopField%
+      Random delay, 0, %KeyVariation%
+      Sleep %delay%
+    }
+  }
+}}
 
   ; === Functions ===
   copy: func [source target count] [
@@ -51,14 +67,14 @@ autohotkey: make backend [
       foreach line lines [
         either remove-count > 0  [
           emit {SendEvent {Insert}}
-          emit rejoin [{SendEvent {Text}} replace/all system/words/copy line {;} {`;}]
+          emit rejoin [{S("} replace/all system/words/copy line {;} {`;} {")}]
           if (length? line) < (length? remove-data/1) [
             emit {SendEvent {Shift Down}{End}{Shift Up}{Delete}}
           ]
           emit {SendEvent {Right}}
           emit {SendEvent {Insert}}
         ] [
-          emit rejoin [{SendEvent {Text}} replace/all system/words/copy line {;} {`;} {`n}]
+          emit rejoin [{S("} replace/all system/words/copy line {;} {`;} {`n} {")}]
         ]
         remove-count: remove-count - 1
         remove-data: next remove-data
@@ -77,7 +93,7 @@ autohotkey: make backend [
         if any [not carry not last? lines] [
           append text {`n}
         ]
-        emit rejoin [{SendEvent {Text}} text]
+        emit rejoin [{S("} text {")}]
       ]
       if carry [
         emit {SendEvent {Right}}
@@ -109,7 +125,12 @@ autohotkey: make backend [
     emit rejoin [{Send ^{} pick [{Up} {Down}] delta < 0 { } abs delta {^}}]
   ]
   rate: func [value] [
-    emit rejoin [{SetKeyDelay } either value = 0 [0] [to-integer 1000 * 1.0 / value] {, 0}]
+    emit rejoin [{SetKeyDelay } either value/1 = 0 [0] [to-integer 1000 * 1.0 / value/1] {, 0}]
+    either 1 < length? value [
+      emit reform [{global KeyVariation :=} round/floor (1000 * value/2)]
+    ] [
+      emit {global KeyVariation := 0}
+    ]
   ]
   remove: func [count] [
     remove-count: count
@@ -143,7 +164,7 @@ either attempt [exists? file: to-file system/options/args/1] [
       [ #"<"  (action: 'copy)
       | #">"  (action: 'replace)
       | #"|"  (action: 'pause)
-      | #"'"  (action: 'rate)
+      | #"'"  (action: 'rate) [copy arg 1 2 label (arg: to-block load arg)]
       | #"#"  (action: 'highlight)
       | #"^^" (action: 'scroll)
       | #"!"  (action: 'save)
@@ -231,7 +252,7 @@ either attempt [exists? file: to-file system/options/args/1] [
               exporter/pause arg
             ]
             rate [
-              print [{  . Set rate to} arg {cps}]
+              print rejoin [{  . Set rate to } arg/1 either 2 = length? arg [rejoin [{ +/-} arg/2]] [{}] { cps}]
               exporter/rate arg
             ]
             replace [
