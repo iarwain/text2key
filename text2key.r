@@ -6,7 +6,6 @@ REBOL [
 ]
 
 ; === Default settings ===
-editor: {@sublime_text.exe}
 key:    {ctrl alt f12}
 
 ; === Generic backend context ===
@@ -34,7 +33,6 @@ autohotkey: make backend [
 
   ; === Initialization ===
   emit {Esc::ExitApp}
-  emit {^^!F1::Reload}
   emit {S(text)
 {
   if %A_KeyDelay% = 0
@@ -71,13 +69,17 @@ autohotkey: make backend [
     either remove-count != 0 [
       foreach line lines [
         either remove-count > 0  [
+          emit {SetKeyDelay %A_KeyDelay%, 100}
           emit {SendEvent {Insert}}
+          emit {SetKeyDelay %A_KeyDelay%, 0}
           emit rejoin [{S("} replace/all replace/all system/words/copy line {;} {`;} {"} {""} {")}]
           if (length? line) < (length? remove-data/1) [
             emit {SendEvent {Shift Down}{End}{Shift Up}{Delete}}
           ]
           emit {SendEvent {Right}}
+          emit {SetKeyDelay %A_KeyDelay%, 100}
           emit {SendEvent {Insert}}
+          emit {SetKeyDelay %A_KeyDelay%, 0}
         ] [
           emit rejoin [{S("} replace/all replace/all system/words/copy line {;} {`;} {"} {""} {`n} {")}]
         ]
@@ -117,11 +119,10 @@ autohotkey: make backend [
     ]
     emit rejoin [uppercase value {::}]
   ]
-  editor: func [value] [
+  window: func [value] [
     emit {SetTitleMatchMode, 2}
     emit reform [{WinWait,} replace value #"@" " ahk_exe "]
     emit reform [{WinActivate,} replace value #"@" " ahk_exe "]
-    emit {SendEvent {Control Down}{a}{Control Up}{Delete}}
   ]
   move: func [delta] [
     if highlight-count != 0 [
@@ -181,11 +182,12 @@ either attempt [exists? file: to-rebol-file system/options/args/1] [
       [ #"<"  (action: 'copy)
       | #"#"  (action: 'highlight)
       | #"|"  (action: 'pause)
-      | #"'"  (action: 'rate) [copy arg 1 2 label (arg: to-block load arg)]
+      | #"'"  (action: 'rate)   spaces copy arg 1 2 label (arg: to-block load arg)
       | #">"  (action: 'replace)
       | #"^^" (action: 'scroll)
       | #"!"  (action: 'save)
-      | #"%"  (action: 'send) [copy arg any option-value (arg: trim arg)]
+      | #"%"  (action: 'send)   spaces copy arg any option-value (arg: trim arg)
+      | #"@"  (action: 'window) spaces copy arg any option-value (arg: trim arg)
       ] opt [copy arg label (arg: load arg)]
     ]
     options: [(actions: copy []) any [option (repend actions [action arg])]]
@@ -197,9 +199,6 @@ either attempt [exists? file: to-rebol-file system/options/args/1] [
     ]
     key-marker: [
       spaces comment-marker spaces #"[" {key} #":" copy value to #"]" thru lf (set 'key trim value)
-    ]
-    editor-marker: [
-      spaces comment-marker spaces #"[" {editor} #":" copy value to #"]" thru lf (set 'editor trim value)
     ]
 
     set 'sections make hash! []
@@ -215,7 +214,6 @@ either attempt [exists? file: to-rebol-file system/options/args/1] [
       any [
         section-marker (current: add-section section actions)
       | key-marker
-      | editor-marker
       | copy line thru lf (append current/content trim/tail line current/line-count: current/line-count + 1)
       ]
     ]
@@ -226,8 +224,6 @@ either attempt [exists? file: to-rebol-file system/options/args/1] [
   either steps = unique steps [
     print [{== Setting key [} key {]}]
     exporter/key key
-    print [{== Setting editor [} editor {]}]
-    exporter/editor editor
     print [{== Processing} length? steps {steps}]
     do funct [] [
       find-line: funct [section /with current] [
@@ -265,6 +261,10 @@ either attempt [exists? file: to-rebol-file system/options/args/1] [
             copy [
               target: find-line/with arg step
               print [{  . Copying from [} arg {]} sections/(to-string arg)/line-count {lines at line} target]
+            ]
+            window [
+              print [{  . Focusing window [} arg {]}]
+              exporter/window arg
             ]
             highlight [
               target: find-line/with arg step
