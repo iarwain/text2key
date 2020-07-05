@@ -188,9 +188,10 @@ either attempt [exists? file: to-rebol-file system/options/args/1] [
       | #"!"  (action: 'save)
       | #"%"  (action: 'send)   spaces copy arg any option-value (arg: trim arg)
       | #"@"  (action: 'window) spaces copy arg any option-value (arg: trim arg)
+      | #"-"  (actions: post-actions)
       ] opt [copy arg label (arg: load arg)]
     ]
-    options: [(actions: copy []) any [option (repend actions [action arg])]]
+    options: [(actions: pre-actions: copy [] post-actions: copy []) any [option (all [action repend actions [action arg]])]]
     space: charset [#" " #"^-"]
     spaces: [any space]
     comment-marker: [{//} | #";" | #"#"]
@@ -204,15 +205,15 @@ either attempt [exists? file: to-rebol-file system/options/args/1] [
     set 'sections make hash! []
     current: 1
     add-section: func [
-      label actions'
+      label pre-actions' post-actions'
     ] [
-      last append sections reduce [trim to-string label context [actions: actions' line-count: 0 content: copy []]]
+      last append sections reduce [trim to-string label context [pre-actions: pre-actions' post-actions: post-actions' line-count: 0 content: copy []]]
     ]
 
     print [{== Parsing [} to-local-file file {]}]
     parse/all read file [
       any [
-        section-marker (current: add-section section actions)
+        section-marker (current: add-section section pre-actions post-actions)
       | key-marker
       | copy line thru lf (append current/content trim/tail line current/line-count: current/line-count + 1)
       ]
@@ -255,57 +256,59 @@ either attempt [exists? file: to-rebol-file system/options/args/1] [
         section: sections/:step
         print [{ - Step [} step {]}]
 
-        ; === Actions ===
-        foreach [action arg] section/actions [
-          switch action [
-            copy [
-              target: find-line/with arg step
-              print [{  . Copying from [} arg {]} sections/(to-string arg)/line-count {lines at line} target]
-            ]
-            window [
-              print [{  . Focusing window [} arg {]}]
-              exporter/window arg
-            ]
-            highlight [
-              target: find-line/with arg step
-              print [{  . Highlighting to beginning of [} arg {], line} target]
-              exporter/highlight target - exporter/current
-            ]
-            pause [
-              print [{  . Pausing} arg {seconds}]
-              exporter/pause arg
-            ]
-            rate [
-              print rejoin [{  . Set rate to } arg/1 either 2 = length? arg [rejoin [{ +/-} to-integer (1000 * arg/2) {ms}]] [{}] { cps}]
-              exporter/rate arg
-            ]
-            replace [
-              arg: to-string arg
-              either not find replaced arg [
-                move-to target: find-line/with arg step
-                print [{  . Replacing [} arg {], removing} sections/(arg)/line-count {lines at line} target]
-                exporter/remove sections/(arg)/line-count
-                remove/part at exporter/data target sections/(arg)/line-count
-                append replaced arg
-              ] [
-                print [{!! Aborting: trying to replace [} arg {] which was already replaced earlier}]
-                break
+        ; === Pre-Actions ===
+        do process-actions: funct [actions] [
+          foreach [action arg] actions [
+            switch action [
+              copy [
+                target: find-line/with arg step
+                print [{  . Copying from [} arg {]} sections/(to-string arg)/line-count {lines at line} target]
+              ]
+              window [
+                print [{  . Focusing window [} arg {]}]
+                exporter/window arg
+              ]
+              highlight [
+                target: find-line/with arg step
+                print [{  . Highlighting to beginning of [} arg {], line} target]
+                exporter/highlight target - exporter/current
+              ]
+              pause [
+                print [{  . Pausing} arg {seconds}]
+                exporter/pause arg
+              ]
+              rate [
+                print rejoin [{  . Set rate to } arg/1 either 2 = length? arg [rejoin [{ +/-} to-integer (1000 * arg/2) {ms}]] [{}] { cps}]
+                exporter/rate arg
+              ]
+              replace [
+                arg: to-string arg
+                either not find replaced arg [
+                  move-to target: find-line/with arg step
+                  print [{  . Replacing [} arg {], removing} sections/(arg)/line-count {lines at line} target]
+                  exporter/remove sections/(arg)/line-count
+                  remove/part at exporter/data target sections/(arg)/line-count
+                  append replaced arg
+                ] [
+                  print [{!! Aborting: trying to replace [} arg {] which was already replaced earlier}]
+                  break
+                ]
+              ]
+              save [
+                print [{  . Saving document}]
+                exporter/save
+              ]
+              scroll [
+                print [{  . Scrolling [} arg {] lines}]
+                exporter/scroll arg
+              ]
+              send [
+                print [{  . Sending [} arg {]}]
+                exporter/send arg
               ]
             ]
-            save [
-              print [{  . Saving document}]
-              exporter/save
-            ]
-            scroll [
-              print [{  . Scrolling [} arg {] lines}]
-              exporter/scroll arg
-            ]
-            send [
-              print [{  . Sending [} arg {]}]
-              exporter/send arg
-            ]
           ]
-        ]
+        ] section/pre-actions
 
         ; === Insertion ===
         move-to find-line step
@@ -313,6 +316,9 @@ either attempt [exists? file: to-rebol-file system/options/args/1] [
         exporter/insert section/content
         insert at exporter/data find-line step section/content
         exporter/current: exporter/current + section/line-count
+
+        ; === Post-Actions ===
+        do process-actions section/post-actions
       ]
 
       ; === Saving
