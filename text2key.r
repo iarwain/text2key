@@ -203,12 +203,17 @@ either attempt [exists? file: to-rebol-file system/options/args/1] [
     options: [(actions: pre-actions: copy [] post-actions: copy []) any [option (all [action repend actions [action arg]])]]
     space: charset [#" " #"^-"]
     spaces: [any space]
-    comment-marker: [{//} | #";" | #"#"]
-    section-marker: [
-      spaces comment-marker spaces #"[" copy section label options #"]" thru lf
+    comment-rule: [{//} | #";" | #"#"]
+    section-rule: [
+      spaces comment-rule spaces #"[" (current: none)
+      [ copy section label options #"]" (current: add-section section pre-actions post-actions)
+      | [ #"]" (section: {})
+        | copy section to #"]"
+        ] (print [{ - Skipping section} rejoin [{[} section {]}]])
+      ] thru lf
     ]
-    key-marker: [
-      spaces comment-marker spaces #"[" {key} #":" copy value to #"]" thru lf (set 'key trim value)
+    key-rule: [
+      spaces comment-rule spaces #"[" {key} #":" copy value to #"]" thru lf (set 'key trim value)
     ]
 
     set 'sections make hash! []
@@ -221,10 +226,10 @@ either attempt [exists? file: to-rebol-file system/options/args/1] [
 
     print [{== Parsing [} to-local-file file {]}]
     parse/all read file [
-      any [
-        section-marker (current: add-section section pre-actions post-actions)
-      | key-marker
-      | copy line thru lf (append current/content trim/tail line current/line-count: current/line-count + 1)
+      any
+      [ key-rule
+      | section-rule
+      | copy line thru lf (all [current append current/content trim/tail line current/line-count: current/line-count + 1])
       ]
     ]
     set 'steps sort/compare extract sections 2 func [a b] [(load a) < (load b)]
