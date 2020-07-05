@@ -58,6 +58,14 @@ autohotkey: make backend [
     emit rejoin [{Sleep } to-integer 1000 * to-decimal duration]
   ]
   highlight: func [delta] [
+    if highlight-count != 0 [
+      emit either highlight-count > 0 [{SendEvent {Left}}] [{SendEvent {Right}}]
+      highlight-count: 0
+    ]
+    if remove-count != 0 [
+      emit rejoin [{SendEvent {Shift Down}^{Down } remove-count {^}{Shift Up}{Delete}}]
+      remove-count: 0
+    ]
     emit rejoin [{SendEvent {Shift Down}^{} pick [{Down } {Up }] delta > 0 abs delta {^}{Shift Up}}]
     highlight-count: delta
   ]
@@ -80,16 +88,16 @@ autohotkey: make backend [
           emit {SetKeyDelay %A_KeyDelay%, 100}
           emit {SendEvent {Insert}}
           emit {SetKeyDelay %A_KeyDelay%, 0}
+          remove-count: remove-count - 1
+          remove-data: next remove-data
         ] [
           emit rejoin [{S("} replace/all replace/all system/words/copy line {;} {`;} {"} {""} {`n} {")}]
         ]
-        remove-count: remove-count - 1
-        remove-data: next remove-data
       ]
       if remove-count > 0 [
         emit rejoin [{SendEvent {Shift Down}^{Down } remove-count {^}{Shift Up}{Delete}}]
+        remove-count: 0
       ]
-      remove-count: 0
     ] [
       if carry: to-logic all [current < length? data not empty? lines not empty? data/:current] [
         emit {SendEvent {Text}`n}
@@ -118,11 +126,6 @@ autohotkey: make backend [
       replace/all value src dst
     ]
     emit rejoin [uppercase value {::}]
-  ]
-  window: func [value] [
-    emit {SetTitleMatchMode, 2}
-    emit reform [{WinWait,} replace value #"@" " ahk_exe "]
-    emit reform [{WinActivate,} replace value #"@" " ahk_exe "]
   ]
   move: func [delta] [
     if highlight-count != 0 [
@@ -159,6 +162,11 @@ autohotkey: make backend [
     emit reform [either find value #"@" [{ControlSend, ahk_parent,}] [{Send}] replace value #"@" ", ahk_exe "]
     emit {SetKeyDelay %A_KeyDelay%, 0}
   ]
+  window: func [value] [
+    emit {SetTitleMatchMode, 2}
+    emit reform [{WinWait,} replace value #"@" " ahk_exe "]
+    emit reform [{WinActivate,} replace value #"@" " ahk_exe "]
+  ]
 ]
 
 ; === Log ===
@@ -188,6 +196,7 @@ either attempt [exists? file: to-rebol-file system/options/args/1] [
       | #"!"  (action: 'save)
       | #"%"  (action: 'send)   spaces copy arg any option-value (arg: trim arg)
       | #"@"  (action: 'window) spaces copy arg any option-value (arg: trim arg)
+      | #"."  (action: 'move)
       | #"-"  (actions: post-actions)
       ] opt [copy arg label (arg: load arg)]
     ]
@@ -264,14 +273,13 @@ either attempt [exists? file: to-rebol-file system/options/args/1] [
                 target: find-line/with arg step
                 print [{  . Copying from [} arg {]} sections/(to-string arg)/line-count {lines at line} target]
               ]
-              window [
-                print [{  . Focusing window [} arg {]}]
-                exporter/window arg
-              ]
               highlight [
                 target: find-line/with arg step
                 print [{  . Highlighting to beginning of [} arg {], line} target]
                 exporter/highlight target - exporter/current
+              ]
+              move [
+                move-to find-line step
               ]
               pause [
                 print [{  . Pausing} arg {seconds}]
@@ -305,6 +313,10 @@ either attempt [exists? file: to-rebol-file system/options/args/1] [
               send [
                 print [{  . Sending [} arg {]}]
                 exporter/send arg
+              ]
+              window [
+                print [{  . Focusing window [} arg {]}]
+                exporter/window arg
               ]
             ]
           ]
