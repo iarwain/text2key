@@ -29,7 +29,7 @@ backend: context [
 autohotkey: make backend [
 
   ; === Variables ===
-  extension: %.ahk remove-count: highlight-count: rate-value: 0 remove-data: none fast-mode: false
+  extension: %.ahk remove-count: highlight-count: 0 remove-data: none
 
   ; === Initialization ===
   emit {Esc::ExitApp}
@@ -55,16 +55,7 @@ autohotkey: make backend [
     ; TODO
   ]
   pause: func [duration] [
-    emit rejoin [{Sleep } any [fast-mode to-integer 1000 * to-decimal duration]]
-  ]
-  fast: func [value] [
-    emit rejoin [
-      {SetKeyDelay } either fast-mode: case [
-        value       [to-integer 1000 * to-decimal value]
-        fast-mode   [false]
-        true        [1000]
-      ] [0] [rate-value]
-    ]
+    emit rejoin [{Sleep } to-integer 1000 * to-decimal duration]
   ]
   highlight: func [delta] [
     if highlight-count != 0 [
@@ -148,14 +139,11 @@ autohotkey: make backend [
     emit rejoin [{SendEvent ^{} pick [{Up} {Down}] delta < 0 { } abs delta {^}}]
   ]
   rate: func [values] [
-    rate-value: either values/1 = 0 [0] [to-integer 1000 * 1.0 / values/1]
-    if not fast-mode [
-      emit rejoin [{SetKeyDelay } rate-value {, 0}]
-      either 1 < length? values [
-        emit reform [{global KeyVariation :=} to-integer (1000 * values/2)]
-      ] [
-        emit {global KeyVariation := 0}
-      ]
+    emit rejoin [{SetKeyDelay } either values/1 = 0 [0] [to-integer 1000 * 1.0 / values/1] {, 0}]
+    either 1 < length? values [
+      emit reform [{global KeyVariation :=} to-integer (1000 * values/2)]
+    ] [
+      emit {global KeyVariation := 0}
     ]
   ]
   remove: func [count] [
@@ -279,7 +267,7 @@ either attempt [exists? file: to-rebol-file system/options/args/1] [
           exporter/current: line
         ]
       ]
-      replaced: copy []
+      replaced: copy [] fast: false rate: []
       foreach step steps [
         section: sections/:step
         print [{ - Step [} step {]}]
@@ -293,7 +281,18 @@ either attempt [exists? file: to-rebol-file system/options/args/1] [
                 print [{  . Copying from [} arg {]} sections/(to-string arg)/line-count {lines at line} target]
               ]
               fast [
-                exporter/fast probe arg
+                set 'fast case [
+                  arg     [arg]
+                  fast    [false]
+                  true    [1]
+                ]
+                exporter/rate either fast [
+                  print [{  . Setting fast mode to ON, pause override = [} fast {]}]
+                  [0]
+                ] [
+                  print {  . Setting fast mode to OFF}
+                  rate
+                ]
               ]
               highlight [
                 target: either actions = section/post-actions [find-line/with/post arg step] [find-line/with arg step]
@@ -305,11 +304,14 @@ either attempt [exists? file: to-rebol-file system/options/args/1] [
               ]
               pause [
                 print [{  . Pausing} arg {seconds}]
-                exporter/pause arg
+                exporter/pause any [fast arg]
               ]
               rate [
                 print rejoin [{  . Set rate to } arg/1 either 2 = length? arg [rejoin [{ +/-} to-integer (1000 * arg/2) {ms}]] [{}] { cps}]
-                exporter/rate arg
+                set 'rate arg
+                if not fast [
+                  exporter/rate rate
+                ]
               ]
               replace [
                 arg: to-string arg
