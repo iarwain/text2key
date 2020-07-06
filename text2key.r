@@ -29,7 +29,7 @@ backend: context [
 autohotkey: make backend [
 
   ; === Variables ===
-  extension: %.ahk remove-count: highlight-count: 0 remove-data: none
+  extension: %.ahk remove-count: highlight-count: rate-value: 0 remove-data: none fast-mode: false
 
   ; === Initialization ===
   emit {Esc::ExitApp}
@@ -55,7 +55,16 @@ autohotkey: make backend [
     ; TODO
   ]
   pause: func [duration] [
-    emit rejoin [{Sleep } to-integer 1000 * to-decimal duration]
+    emit rejoin [{Sleep } any [fast-mode to-integer 1000 * to-decimal duration]]
+  ]
+  fast: func [value] [
+    emit rejoin [
+      {SetKeyDelay } either fast-mode: case [
+        value       [to-integer 1000 * to-decimal value]
+        fast-mode   [false]
+        true        [1000]
+      ] [0] [rate-value]
+    ]
   ]
   highlight: func [delta] [
     if highlight-count != 0 [
@@ -139,11 +148,14 @@ autohotkey: make backend [
     emit rejoin [{SendEvent ^{} pick [{Up} {Down}] delta < 0 { } abs delta {^}}]
   ]
   rate: func [values] [
-    emit rejoin [{SetKeyDelay } either values/1 = 0 [0] [to-integer 1000 * 1.0 / values/1] {, 0}]
-    either 1 < length? values [
-      emit reform [{global KeyVariation :=} to-integer (1000 * values/2)]
-    ] [
-      emit {global KeyVariation := 0}
+    rate-value: either values/1 = 0 [0] [to-integer 1000 * 1.0 / values/1]
+    if not fast-mode [
+      emit rejoin [{SetKeyDelay } rate-value {, 0}]
+      either 1 < length? values [
+        emit reform [{global KeyVariation :=} to-integer (1000 * values/2)]
+      ] [
+        emit {global KeyVariation := 0}
+      ]
     ]
   ]
   remove: func [count] [
@@ -152,6 +164,7 @@ autohotkey: make backend [
   ]
   save: does [
     emit {SendEvent {Control Down}{s}{Control Up}}
+    pause 0.1
   ]
   scroll: func [delta] [
     delta: to-integer delta
@@ -197,6 +210,7 @@ either attempt [exists? file: to-rebol-file system/options/args/1] [
       | #"%"  (action: 'send)   spaces copy arg any option-value (arg: trim arg)
       | #"@"  (action: 'window) spaces copy arg any option-value (arg: trim arg)
       | #"."  (action: 'move)
+      | #"~"  (action: 'fast) spaces opt [copy arg label]
       | #"-"  (actions: post-actions)
       ] opt [copy arg label (arg: load arg)]
     ]
@@ -277,6 +291,9 @@ either attempt [exists? file: to-rebol-file system/options/args/1] [
               copy [
                 target: either actions = section/post-actions [find-line/with/post arg step] [find-line/with arg step]
                 print [{  . Copying from [} arg {]} sections/(to-string arg)/line-count {lines at line} target]
+              ]
+              fast [
+                exporter/fast probe arg
               ]
               highlight [
                 target: either actions = section/post-actions [find-line/with/post arg step] [find-line/with arg step]
