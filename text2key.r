@@ -241,7 +241,7 @@ either attempt [exists? file: to-rebol-file system/options/args/1] [
     exporter/key key
     print [{== Processing} length? steps {steps}]
     do funct [] [
-      find-line: funct [section /with current] [
+      find-line: funct [section /with current /post] [
         section: to-string section result: 1
         foreach [label content] sections [
           case [
@@ -250,7 +250,7 @@ either attempt [exists? file: to-rebol-file system/options/args/1] [
             ]
             all [
               not find replaced label
-              (load label) < (load either with [to-string current] [section])
+              do get to-lit-word pick [{<=} {<}] to-logic post (load label) (load either with [to-string current] [section])
             ] [
               result: result + sections/:label/line-count
             ]
@@ -275,11 +275,11 @@ either attempt [exists? file: to-rebol-file system/options/args/1] [
           foreach [action arg] actions [
             switch action [
               copy [
-                target: find-line/with arg step
+                target: either actions = section/post-actions [find-line/with/post arg step] [find-line/with arg step]
                 print [{  . Copying from [} arg {]} sections/(to-string arg)/line-count {lines at line} target]
               ]
               highlight [
-                target: find-line/with arg step
+                target: either actions = section/post-actions [find-line/with/post arg step] [find-line/with arg step]
                 print [{  . Highlighting to beginning of [} arg {], line} target]
                 exporter/highlight target - exporter/current
               ]
@@ -297,7 +297,7 @@ either attempt [exists? file: to-rebol-file system/options/args/1] [
               replace [
                 arg: to-string arg
                 either not find replaced arg [
-                  move-to target: find-line/with arg step
+                  move-to target: either actions = section/post-actions [find-line/with/post arg step] [find-line/with arg step]
                   print [{  . Replacing [} arg {], removing} sections/(arg)/line-count {lines at line} target]
                   exporter/remove sections/(arg)/line-count
                   remove/part at exporter/data target sections/(arg)/line-count
