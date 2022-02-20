@@ -6,7 +6,7 @@ REBOL [
 ]
 
 ; === Default settings ===
-key:    {ctrl alt f12}
+key: {ctrl alt f12}
 
 ; === Generic backend context ===
 backend: context [
@@ -295,6 +295,7 @@ either attempt [exists? file: to-rebol-file system/options/args/1] [
                 ]
               ]
               highlight [
+                arg: any [arg step]
                 target: either actions = section/post-actions [find-line/with/post arg step] [find-line/with arg step]
                 print [{  . Highlighting to beginning of [} arg {], line} target]
                 exporter/highlight target - exporter/current
